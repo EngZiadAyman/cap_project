@@ -3,7 +3,7 @@ import time
 from database import save_sensor_reading
 
 # ─── غيّر هذا للـ IP اللي يطلع في Serial Monitor بعد الاتصال ───
-ESP32_IP = "192.168.1.12"
+ESP32_IP = "192.168.1.11"
 URL      = f"http://{ESP32_IP}/data"
 INTERVAL = 2  # ثواني بين كل قراءة
 SAVE_INTERVAL = 60  # دقيقة واحدة = 60 ثانية

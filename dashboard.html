@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌿 نظام مراقبة المستشعرات</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg: #0a0f1e;
+  --surface: #0f1729;
+  --surface2: #141d33;
+  --surface3: #1a2540;
+  --border: rgba(99,179,237,0.12);
+  --border-bright: rgba(99,179,237,0.3);
+
+  --emerald: #10d98a;
+  --emerald-dim: rgba(16,217,138,0.15);
+  --emerald-glow: rgba(16,217,138,0.4);
+
+  --sky: #38bdf8;
+  --sky-dim: rgba(56,189,248,0.12);
+
+  --amber: #fbbf24;
+  --amber-dim: rgba(251,191,36,0.15);
+
+  --rose: #f43f5e;
+  --rose-dim: rgba(244,63,94,0.15);
+
+  --violet: #a78bfa;
+  --violet-dim: rgba(167,139,250,0.12);
+
+  --text-primary: #e8f0fe;
+  --text-secondary: #8899bb;
+  --text-dim: #4a5a7a;
+
+  --radius: 16px;
+  --radius-sm: 8px;
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --font-ar: 'IBM Plex Sans Arabic', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-ar);
+  background: var(--bg);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Noise texture overlay ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+}
+
+/* ── Ambient glow blobs ── */
+.ambient {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+}
+.ambient-1 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(16,217,138,0.08) 0%, transparent 70%);
+  top: -100px; right: -100px;
+}
+.ambient-2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(56,189,248,0.07) 0%, transparent 70%);
+  bottom: -50px; left: -50px;
+}
+.ambient-3 {
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(167,139,250,0.05) 0%, transparent 70%);
+  top: 40%; left: 40%;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  position: fixed;
+  top: 0; right: 0;
+  height: 100vh;
+  width: 260px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: var(--transition);
+}
+
+.sidebar-logo {
+  padding: 28px 24px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo-icon {
+  width: 44px; height: 44px;
+  background: var(--emerald-dim);
+  border: 1px solid var(--emerald-glow);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  margin-bottom: 12px;
+  position: relative;
+}
+.logo-icon::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--emerald-glow), transparent);
+  opacity: 0.3;
+}
+
+.logo-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+.logo-sub {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+}
+
+/* Connection badge */
+.conn-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin: 12px 16px;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.conn-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--emerald);
+  box-shadow: 0 0 8px var(--emerald);
+  animation: breathe 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.conn-dot.offline { background: var(--rose); box-shadow: 0 0 8px var(--rose); animation: none; }
+@keyframes breathe { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.85)} }
+
+/* Base URL input */
+.url-input-wrap {
+  padding: 0 16px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.url-label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.url-input {
+  width: 100%;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--emerald);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 8px 10px;
+  outline: none;
+  transition: var(--transition);
+  direction: ltr;
+}
+.url-input:focus {
+  border-color: var(--emerald-glow);
+  box-shadow: 0 0 0 3px rgba(16,217,138,0.1);
+}
+
+/* Nav items */
+.nav {
+  flex: 1;
+  padding: 12px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: var(--transition);
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  user-select: none;
+}
+
+.nav-item:hover {
+  background: var(--surface2);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: var(--emerald-dim);
+  color: var(--emerald);
+  border-color: rgba(16,217,138,0.2);
+}
+
+.nav-icon {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  font-size: 16px;
+  background: var(--surface3);
+  flex-shrink: 0;
+}
+
+.nav-item.active .nav-icon {
+  background: var(--emerald-dim);
+}
+
+.nav-badge {
+  margin-right: auto;
+  background: var(--emerald-dim);
+  color: var(--emerald);
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid rgba(16,217,138,0.2);
+}
+
+/* Sidebar bottom */
+.sidebar-footer {
+  padding: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.refresh-btn {
+  width: 100%;
+  padding: 10px;
+  background: var(--emerald-dim);
+  color: var(--emerald);
+  border: 1px solid rgba(16,217,138,0.25);
+  border-radius: 10px;
+  font-family: var(--font-ar);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.refresh-btn:hover {
+  background: rgba(16,217,138,0.25);
+  box-shadow: 0 0 20px rgba(16,217,138,0.2);
+}
+.refresh-btn.spinning .icon-refresh { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Main content ── */
+.main {
+  margin-right: 260px;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+.topbar {
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(10,15,30,0.7);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.page-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.page-sub {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+  font-family: var(--font-mono);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auto-refresh-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.toggle {
+  width: 40px; height: 22px;
+  background: var(--surface3);
+  border-radius: 11px;
+  position: relative;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: var(--transition);
+}
+.toggle.on {
+  background: var(--emerald-dim);
+  border-color: rgba(16,217,138,0.4);
+}
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  top: 2px; right: 2px;
+  transition: var(--transition);
+}
+.toggle.on::after {
+  background: var(--emerald);
+  right: calc(100% - 18px);
+  box-shadow: 0 0 6px var(--emerald);
+}
+
+.last-update {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: var(--surface2);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+/* ── Content area ── */
+.content {
+  padding: 28px 32px;
+}
+
+.page { display: none; animation: fadeUp 0.35s ease; }
+.page.active { display: block; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Section labels ── */
+.section-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── KPI Grid ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 20px;
+  cursor: default;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent-color, var(--emerald));
+  opacity: 0.6;
+}
+
+.kpi-card:hover {
+  border-color: var(--border-bright);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+
+.kpi-card.emerald { --accent-color: var(--emerald); }
+.kpi-card.sky { --accent-color: var(--sky); }
+.kpi-card.amber { --accent-color: var(--amber); }
+.kpi-card.rose { --accent-color: var(--rose); }
+.kpi-card.violet { --accent-color: var(--violet); }
+
+.kpi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.kpi-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.kpi-icon {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px;
+  background: var(--icon-bg, var(--emerald-dim));
+}
+
+.kpi-card.emerald .kpi-icon { background: var(--emerald-dim); }
+.kpi-card.sky .kpi-icon { background: var(--sky-dim); }
+.kpi-card.amber .kpi-icon { background: var(--amber-dim); }
+.kpi-card.rose .kpi-icon { background: var(--rose-dim); }
+.kpi-card.violet .kpi-icon { background: var(--violet-dim); }
+
+.kpi-value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1;
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+  color: var(--accent-color, var(--text-primary));
+}
+
+.kpi-unit {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: inline;
+  font-family: var(--font-ar);
+  font-weight: 400;
+}
+
+.kpi-status {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.kpi-status.good { background: var(--emerald-dim); border-color: rgba(16,217,138,0.2); color: var(--emerald); }
+.kpi-status.warn { background: var(--amber-dim); border-color: rgba(251,191,36,0.2); color: var(--amber); }
+.kpi-status.danger { background: var(--rose-dim); border-color: rgba(244,63,94,0.2); color: var(--rose); }
+
+/* Progress bar inside card */
+.kpi-bar {
+  margin-top: 12px;
+  height: 4px;
+  background: var(--surface3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.kpi-bar-fill {
+  height: 100%;
+  background: var(--accent-color, var(--emerald));
+  border-radius: 2px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0.7;
+}
+
+/* ── Charts grid ── */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 1100px) { .charts-grid { grid-template-columns: 1fr; } }
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.chart-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.chart-wrap {
+  height: 180px;
+  position: relative;
+}
+
+/* ── Full-width card ── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-body { padding: 20px; }
+
+/* ── Table ── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+.data-table thead th {
+  background: var(--surface2);
+  padding: 10px 14px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--border);
+}
+.data-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(99,179,237,0.05);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+.data-table tbody tr:hover td {
+  background: var(--surface2);
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-family: var(--font-ar);
+  font-weight: 500;
+}
+.badge-ok { background: var(--emerald-dim); color: var(--emerald); border: 1px solid rgba(16,217,138,0.2); }
+.badge-warn { background: var(--rose-dim); color: var(--rose); border: 1px solid rgba(244,63,94,0.2); }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ar);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: var(--transition);
+}
+.btn-primary {
+  background: var(--emerald-dim);
+  color: var(--emerald);
+  border: 1px solid rgba(16,217,138,0.3);
+}
+.btn-primary:hover {
+  background: rgba(16,217,138,0.25);
+  box-shadow: 0 0 20px rgba(16,217,138,0.2);
+}
+.btn-danger {
+  background: var(--rose-dim);
+  color: var(--rose);
+  border: 1px solid rgba(244,63,94,0.3);
+}
+.btn-danger:hover { background: rgba(244,63,94,0.25); }
+
+.btn-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid rgba(251,191,36,0.3);
+}
+.btn-amber:hover { background: rgba(251,191,36,0.25); }
+
+.btn-sky {
+  background: var(--sky-dim);
+  color: var(--sky);
+  border: 1px solid rgba(56,189,248,0.3);
+}
+.btn-sky:hover { background: rgba(56,189,248,0.25); }
+
+/* ── Input/Select ── */
+.form-input, .form-select, .form-textarea {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ar);
+  font-size: 0.88rem;
+  padding: 10px 14px;
+  outline: none;
+  width: 100%;
+  transition: var(--transition);
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  border-color: rgba(16,217,138,0.4);
+  box-shadow: 0 0 0 3px rgba(16,217,138,0.08);
+}
+.form-textarea { resize: vertical; min-height: 90px; }
+.form-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.form-select option { background: var(--surface2); }
+
+.form-group { margin-bottom: 16px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* ── AI Analysis ── */
+.ai-result {
+  background: var(--surface2);
+  border: 1px solid rgba(167,139,250,0.2);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-top: 16px;
+  line-height: 1.8;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  display: none;
+}
+
+.ai-result.visible { display: block; animation: fadeUp 0.4s ease; }
+
+.ai-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 0.75rem;
+  color: var(--violet);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.thinking {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  padding: 16px 20px;
+  background: var(--surface2);
+  border-radius: var(--radius);
+  margin-top: 16px;
+  border: 1px solid var(--border);
+}
+.dots span {
+  display: inline-block;
+  width: 6px; height: 6px;
+  background: var(--violet);
+  border-radius: 50%;
+  margin: 0 2px;
+  animation: bounce 1.2s infinite;
+}
+.dots span:nth-child(2) { animation-delay: 0.2s; }
+.dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-8px)} }
+
+/* ── Stats panel ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.stat-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+}
+.stat-title {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+.stat-val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1;
+}
+.stat-val.green { color: var(--emerald); }
+.stat-val.blue { color: var(--sky); }
+.stat-val.yellow { color: var(--amber); }
+.stat-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* ── Control panel ── */
+.control-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.relay-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  text-align: center;
+}
+.relay-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  display: block;
+}
+.relay-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+.relay-btns {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+/* ── Toast ── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.toast {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  animation: slideInLeft 0.3s ease;
+  min-width: 260px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+@keyframes slideInLeft {
+  from { opacity:0; transform:translateX(-20px); }
+  to { opacity:1; transform:translateX(0); }
+}
+.toast.success { border-color: rgba(16,217,138,0.3); }
+.toast.error { border-color: rgba(244,63,94,0.3); }
+.toast.info { border-color: rgba(56,189,248,0.3); }
+
+/* ── Loading spinner ── */
+.loading-overlay {
+  position: absolute; inset: 0;
+  background: rgba(10,15,30,0.6);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius);
+  backdrop-filter: blur(4px);
+}
+.spinner {
+  width: 32px; height: 32px;
+  border: 2px solid var(--border);
+  border-top-color: var(--emerald);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ── Gas Alert banner ── */
+.gas-alert-banner {
+  background: var(--rose-dim);
+  border: 1px solid rgba(244,63,94,0.4);
+  border-radius: var(--radius-sm);
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--rose);
+  animation: alertPulse 1.5s ease-in-out infinite;
+}
+.gas-alert-banner.show { display: flex; }
+@keyframes alertPulse {
+  0%,100%{ box-shadow: 0 0 0 0 rgba(244,63,94,0); }
+  50%{ box-shadow: 0 0 20px rgba(244,63,94,0.3); }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ── Status row ── */
+.status-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.status-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+/* ── Empty state ── */
+.empty {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+.empty-icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.4; }
+
+/* ── Live indicator ── */
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--rose);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--rose);
+  animation: breathe 1s ease-in-out infinite;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .sidebar { width: 220px; }
+  .main { margin-right: 220px; }
+  .charts-grid { grid-template-columns: 1fr; }
+  .control-grid { grid-template-columns: 1fr; }
+  .form-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 680px) {
+  .sidebar { transform: translateX(100%); }
+  .main { margin-right: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="ambient ambient-1"></div>
+<div class="ambient ambient-2"></div>
+<div class="ambient ambient-3"></div>
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">🌿</div>
+    <div class="logo-title">نظام مراقبة المستشعرات</div>
+    <div class="logo-sub">ESP32 · v1.0.0</div>
+  </div>
+
+  <div class="conn-badge">
+    <div class="conn-dot" id="connDot"></div>
+    <span id="connText">جاري الاتصال...</span>
+  </div>
+
+  <div class="url-input-wrap">
+    <div class="url-label">API Base URL</div>
+    <input class="url-input" type="text" id="baseUrl" value="http://localhost:8000" placeholder="http://localhost:8000">
+  </div>
+
+  <nav class="nav">
+    <div class="nav-item active" data-page="dashboard">
+      <div class="nav-icon">📊</div>
+      لوحة التحكم
+      <span class="nav-badge">LIVE</span>
+    </div>
+    <div class="nav-item" data-page="analytics">
+      <div class="nav-icon">📈</div>
+      الرسوم البيانية
+    </div>
+    <div class="nav-item" data-page="history">
+      <div class="nav-icon">📋</div>
+      سجل البيانات
+    </div>
+    <div class="nav-item" data-page="statistics">
+      <div class="nav-icon">🧮</div>
+      الإحصائيات
+    </div>
+    <div class="nav-item" data-page="ai">
+      <div class="nav-icon">🤖</div>
+      تحليل Gemini
+    </div>
+    <div class="nav-item" data-page="control">
+      <div class="nav-icon">🎛️</div>
+      التحكم
+    </div>
+    <div class="nav-item" data-page="add">
+      <div class="nav-icon">➕</div>
+      إضافة قراءة
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <button class="refresh-btn" id="mainRefreshBtn" onclick="refreshAll()">
+      <span class="icon-refresh">🔄</span>
+      تحديث الكل
+    </button>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<main class="main">
+  <div class="topbar">
+    <div>
+      <div class="page-title" id="pageTitle">لوحة التحكم الرئيسية</div>
+      <div class="page-sub" id="pageSub">نظرة عامة على المستشعرات</div>
+    </div>
+    <div class="topbar-actions">
+      <div class="auto-refresh-toggle">
+        <span>تحديث تلقائي</span>
+        <div class="toggle" id="autoToggle" onclick="toggleAutoRefresh()"></div>
+      </div>
+      <div class="last-update" id="lastUpdate">--:--:--</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ═══ PAGE: Dashboard ═══ -->
+    <div class="page active" id="page-dashboard">
+
+      <div class="gas-alert-banner" id="gasAlertBanner">
+        🚨 تحذير! تم اكتشاف غاز — يرجى التهوية فوراً!
+      </div>
+
+      <div class="section-label">القراءات الحالية</div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card emerald">
+          <div class="kpi-header">
+            <span class="kpi-label">درجة الحرارة</span>
+            <div class="kpi-icon">🌡️</div>
+          </div>
+          <div class="kpi-value" id="kpiTemp">--<span class="kpi-unit"> °C</span></div>
+          <div class="kpi-status" id="kpiTempStatus">جاري التحميل</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpiTempBar" style="width:0%"></div></div>
+        </div>
+
+        <div class="kpi-card sky">
+          <div class="kpi-header">
+            <span class="kpi-label">الرطوبة</span>
+            <div class="kpi-icon">💧</div>
+          </div>
+          <div class="kpi-value" id="kpiHumidity">--<span class="kpi-unit"> %</span></div>
+          <div class="kpi-status" id="kpiHumidityStatus">جاري التحميل</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpiHumidityBar" style="width:0%"></div></div>
+        </div>
+
+        <div class="kpi-card amber">
+          <div class="kpi-header">
+            <span class="kpi-label">رطوبة التربة</span>
+            <div class="kpi-icon">🌱</div>
+          </div>
+          <div class="kpi-value" id="kpiSoil">--<span class="kpi-unit"> %</span></div>
+          <div class="kpi-status" id="kpiSoilStatus">جاري التحميل</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpiSoilBar" style="width:0%"></div></div>
+        </div>
+
+        <div class="kpi-card violet">
+          <div class="kpi-header">
+            <span class="kpi-label">شدة الضوء</span>
+            <div class="kpi-icon">💡</div>
+          </div>
+          <div class="kpi-value" id="kpiLight">--<span class="kpi-unit"> %</span></div>
+          <div class="kpi-status" id="kpiLightStatus">جاري التحميل</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpiLightBar" style="width:0%"></div></div>
+        </div>
+
+        <div class="kpi-card rose">
+          <div class="kpi-header">
+            <span class="kpi-label">مستوى الغاز</span>
+            <div class="kpi-icon">💨</div>
+          </div>
+          <div class="kpi-value" id="kpiGas">--<span class="kpi-unit"> ppm</span></div>
+          <div class="kpi-status" id="kpiGasStatus">جاري التحميل</div>
+          <div class="kpi-bar"><div class="kpi-bar-fill" id="kpiGasBar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Mini live chart -->
+      <div class="section-label">منحنى درجة الحرارة المباشر (آخر 20 قراءة)</div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="live-indicator"><span class="live-dot"></span>LIVE</span>
+            درجة الحرارة والرطوبة
+          </div>
+        </div>
+        <div class="panel-body">
+          <div style="height:200px"><canvas id="miniChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Last reading info -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">📝 تفاصيل آخر قراءة</div>
+        </div>
+        <div class="panel-body" id="latestReadingDetail">
+          <div class="empty"><div class="empty-icon">📡</div>في انتظار البيانات...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: Analytics ═══ -->
+    <div class="page" id="page-analytics">
+      <div class="section-label">الرسوم البيانية — آخر 50 قراءة</div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-title"><span class="chart-dot" style="background:var(--emerald)"></span>درجة الحرارة (°C)</div>
+          <div class="chart-wrap"><canvas id="chartTemp"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><span class="chart-dot" style="background:var(--sky)"></span>الرطوبة (%)</div>
+          <div class="chart-wrap"><canvas id="chartHumidity"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><span class="chart-dot" style="background:var(--amber)"></span>رطوبة التربة (%)</div>
+          <div class="chart-wrap"><canvas id="chartSoil"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title"><span class="chart-dot" style="background:var(--violet)"></span>شدة الضوء (%)</div>
+          <div class="chart-wrap"><canvas id="chartLight"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title"><span class="chart-dot" style="background:var(--rose)"></span>مستوى الغاز (ppm)</div>
+        <div style="height:160px"><canvas id="chartGas"></canvas></div>
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-sky" onclick="loadAnalytics()">🔄 تحديث</button>
+        <select class="form-select" id="analyticsLimit" style="width:auto" onchange="loadAnalytics()">
+          <option value="20">آخر 20</option>
+          <option value="50" selected>آخر 50</option>
+          <option value="100">آخر 100</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: History ═══ -->
+    <div class="page" id="page-history">
+      <div class="section-label">سجل القراءات</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">📋 جدول القراءات</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select class="form-select" id="histLimit" style="width:auto;padding:6px 10px;font-size:0.8rem">
+              <option value="20">آخر 20</option>
+              <option value="50">آخر 50</option>
+              <option value="100">آخر 100</option>
+              <option value="500">آخر 500</option>
+            </select>
+            <button class="btn btn-primary" onclick="loadHistory()">تحميل</button>
+            <button class="btn btn-sky" onclick="exportCSV()">📥 CSV</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>الوقت</th>
+                <th>الحرارة °C</th>
+                <th>الرطوبة %</th>
+                <th>التربة %</th>
+                <th>الضوء %</th>
+                <th>الغاز</th>
+                <th>تنبيه</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody">
+              <tr><td colspan="8"><div class="empty"><div class="empty-icon">📋</div>اضغط تحميل لعرض البيانات</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: Statistics ═══ -->
+    <div class="page" id="page-statistics">
+      <div class="section-label">الإحصائيات</div>
+
+      <div style="display:flex;gap:10px;margin-bottom:20px;align-items:center">
+        <span style="font-size:0.85rem;color:var(--text-secondary)">الفترة الزمنية:</span>
+        <select class="form-select" id="statsHours" style="width:auto">
+          <option value="1">آخر ساعة</option>
+          <option value="6">آخر 6 ساعات</option>
+          <option value="24" selected>آخر 24 ساعة</option>
+          <option value="168">آخر أسبوع</option>
+          <option value="720">آخر شهر</option>
+        </select>
+        <button class="btn btn-primary" onclick="loadStatistics()">📊 احتسب</button>
+      </div>
+
+      <div id="statsContent">
+        <div class="empty"><div class="empty-icon">🧮</div>اختر الفترة واضغط احتسب</div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: AI ═══ -->
+    <div class="page" id="page-ai">
+      <div class="section-label">تحليل ذكي — Gemini AI</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🤖 اسأل الذكاء الاصطناعي</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);font-family:var(--font-mono)">Powered by Gemini Flash</div>
+        </div>
+        <div class="panel-body">
+          <div class="form-group">
+            <label class="form-label">سؤالك</label>
+            <textarea class="form-textarea" id="aiQuery" placeholder="مثال: هل التربة تحتاج رياً؟ ما درجة الحرارة المثالية للنباتات؟">تحليل شامل لحالة المستشعرات وإعطاء توصيات لتحسين البيئة</textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">عدد القراءات للتحليل</label>
+              <select class="form-select" id="aiLimit">
+                <option value="5">5 قراءات</option>
+                <option value="10" selected>10 قراءات</option>
+                <option value="20">20 قراءة</option>
+                <option value="50">50 قراءة</option>
+              </select>
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end">
+              <button class="btn btn-primary" style="width:100%" onclick="runAI()">
+                ✨ تحليل الآن
+              </button>
+            </div>
+          </div>
+
+          <div id="aiThinking" style="display:none">
+            <div class="thinking">
+              <div class="dots"><span></span><span></span><span></span></div>
+              Gemini يحلل البيانات...
+            </div>
+          </div>
+
+          <div class="ai-result" id="aiResult">
+            <div class="ai-header">
+              <span>🤖</span> نتيجة التحليل — <span id="aiReadingsCount"></span> قراءة
+            </div>
+            <div id="aiContent"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick prompts -->
+      <div class="section-label">أسئلة سريعة</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sky" onclick="quickAI('هل النباتات تحتاج ري الآن؟')">💧 هل أحتاج للري؟</button>
+        <button class="btn btn-amber" onclick="quickAI('تحليل مستوى الإضاءة ومدى ملاءمتها للنمو')">☀️ تحليل الإضاءة</button>
+        <button class="btn btn-primary" onclick="quickAI('هل هناك أي قيم شاذة أو مشبوهة في البيانات؟')">🔍 قيم شاذة؟</button>
+        <button class="btn btn-danger" onclick="quickAI('هل مستوى الغاز آمن؟ وما التوصيات؟')">💨 سلامة الغاز</button>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: Control ═══ -->
+    <div class="page" id="page-control">
+      <div class="section-label">لوحة التحكم</div>
+
+      <div class="control-grid">
+        <div class="relay-card">
+          <span class="relay-icon">⚡</span>
+          <div class="relay-name">Relay الأول — نظام الري</div>
+          <div class="relay-btns">
+            <button class="btn btn-primary" onclick="controlRelay('on','1')">▶ تشغيل</button>
+            <button class="btn btn-danger" onclick="controlRelay('off','1')">⬛ إيقاف</button>
+          </div>
+          <div id="relay1Status" style="margin-top:12px;font-size:0.8rem;color:var(--text-dim)">—</div>
+        </div>
+
+        <div class="relay-card">
+          <span class="relay-icon">🌬️</span>
+          <div class="relay-name">Relay الثاني — التهوية</div>
+          <div class="relay-btns">
+            <button class="btn btn-primary" onclick="controlRelay('on','2')">▶ تشغيل</button>
+            <button class="btn btn-danger" onclick="controlRelay('off','2')">⬛ إيقاف</button>
+          </div>
+          <div id="relay2Status" style="margin-top:12px;font-size:0.8rem;color:var(--text-dim)">—</div>
+        </div>
+      </div>
+
+      <div class="section-label" style="margin-top:28px">حالة النظام</div>
+      <div class="panel" id="healthPanel">
+        <div class="panel-body">
+          <div class="empty"><div class="empty-icon">🔌</div>جاري جلب حالة الخادم...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: Add Reading ═══ -->
+    <div class="page" id="page-add">
+      <div class="section-label">إضافة قراءة يدوية</div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">➕ بيانات المستشعرات</div>
+        </div>
+        <div class="panel-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">درجة الحرارة (°C)</label>
+              <input class="form-input" type="number" id="addTemp" step="0.1" placeholder="25.5">
+            </div>
+            <div class="form-group">
+              <label class="form-label">الرطوبة (%)</label>
+              <input class="form-input" type="number" id="addHumidity" step="0.1" placeholder="60.0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">رطوبة التربة (%)</label>
+              <input class="form-input" type="number" id="addSoilPct" placeholder="50">
+            </div>
+            <div class="form-group">
+              <label class="form-label">قيمة التربة الخام</label>
+              <input class="form-input" type="number" id="addSoilRaw" placeholder="500">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">شدة الضوء (%)</label>
+              <input class="form-input" type="number" id="addLightPct" placeholder="75">
+            </div>
+            <div class="form-group">
+              <label class="form-label">قيمة الضوء الخام</label>
+              <input class="form-input" type="number" id="addLightRaw" placeholder="800">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">مستوى الغاز (ppm)</label>
+              <input class="form-input" type="number" id="addGasRaw" placeholder="400">
+            </div>
+            <div class="form-group">
+              <label class="form-label">تنبيه الغاز</label>
+              <select class="form-select" id="addGasAlert">
+                <option value="false">✅ لا يوجد تنبيه</option>
+                <option value="true">🚨 يوجد تنبيه</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" onclick="addReading()">
+            💾 حفظ القراءة
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</main>
+
+<script>
+// ══════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════
+let BASE = 'http://localhost:8000';
+let autoRefresh = false;
+let refreshTimer = null;
+let miniChartInst = null;
+let chartInstances = {};
+let historyData = [];
+
+// ══════════════════════════════════════
+//  API HELPERS
+// ══════════════════════════════════════
+async function api(path, opts = {}) {
+  const url = document.getElementById('baseUrl').value.replace(/\/$/, '');
+  const res = await fetch(url + path, opts);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ══════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════
+function toast(msg, type = 'info') {
+  const icons = { success: '✅', error: '❌', info: 'ℹ️', warn: '⚠️' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${icons[type] || '•'}</span><span>${msg}</span>`;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ══════════════════════════════════════
+//  NAV
+// ══════════════════════════════════════
+const pageTitles = {
+  dashboard: ['لوحة التحكم الرئيسية', 'نظرة عامة على المستشعرات'],
+  analytics: ['الرسوم البيانية', 'تحليل البيانات بصرياً'],
+  history: ['سجل القراءات', 'جميع القراءات المحفوظة'],
+  statistics: ['الإحصائيات', 'متوسطات وقيم قياسية'],
+  ai: ['تحليل Gemini AI', 'ذكاء اصطناعي لتحليل بياناتك'],
+  control: ['لوحة التحكم', 'إدارة الأجهزة والمرحلات'],
+  add: ['إضافة قراءة', 'إدخال بيانات يدوية'],
+};
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    const page = item.dataset.page;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    const [title, sub] = pageTitles[page] || ['', ''];
+    document.getElementById('pageTitle').textContent = title;
+    document.getElementById('pageSub').textContent = sub;
+    onPageLoad(page);
+  });
+});
+
+function onPageLoad(page) {
+  if (page === 'analytics') loadAnalytics();
+  if (page === 'history') loadHistory();
+  if (page === 'statistics') loadStatistics();
+  if (page === 'control') loadHealth();
+}
+
+// ══════════════════════════════════════
+//  HEALTH CHECK
+// ══════════════════════════════════════
+async function checkHealth() {
+  try {
+    const data = await api('/health');
+    document.getElementById('connDot').className = 'conn-dot';
+    document.getElementById('connText').textContent = 'متصل • ' + (data.api_version || '1.0');
+    return true;
+  } catch {
+    document.getElementById('connDot').className = 'conn-dot offline';
+    document.getElementById('connText').textContent = 'غير متصل';
+    return false;
+  }
+}
+
+async function loadHealth() {
+  try {
+    const data = await api('/health');
+    document.getElementById('healthPanel').innerHTML = `<div class="panel-body">
+      <div class="stats-grid">
+        <div class="stat-item"><div class="stat-title">الحالة</div><div class="stat-val green">🟢</div><div class="stat-sub">سليم</div></div>
+        <div class="stat-item"><div class="stat-title">الإصدار</div><div class="stat-val blue">${data.api_version || '1.0'}</div><div class="stat-sub">API Version</div></div>
+        <div class="stat-item"><div class="stat-title">الوقت</div><div class="stat-val" style="font-size:1rem">${new Date(data.timestamp).toLocaleTimeString('ar-EG')}</div><div class="stat-sub">Server Time</div></div>
+      </div>
+    </div>`;
+  } catch (e) {
+    document.getElementById('healthPanel').innerHTML = `<div class="panel-body"><div class="empty"><div class="empty-icon">❌</div>لا يمكن الاتصال بالخادم</div></div>`;
+  }
+}
+
+// ══════════════════════════════════════
+//  DASHBOARD — latest reading
+// ══════════════════════════════════════
+async function loadDashboard() {
+  try {
+    const r = await api('/api/readings/latest');
+    updateKPIs(r);
+    updateDetail(r);
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('ar-EG');
+
+    // Gas alert
+    const banner = document.getElementById('gasAlertBanner');
+    banner.classList.toggle('show', r.gas_alert);
+
+    // Mini chart from last 20
+    const readings = await api('/api/readings?limit=20');
+    updateMiniChart(readings.reverse());
+  } catch (e) {
+    toast('تعذر تحميل البيانات: ' + e.message, 'error');
+  }
+}
+
+function updateKPIs(r) {
+  // Temp
+  const t = r.temp;
+  document.getElementById('kpiTemp').innerHTML = `${t.toFixed(1)}<span class="kpi-unit"> °C</span>`;
+  const tSt = document.getElementById('kpiTempStatus');
+  if (t >= 15 && t <= 30) { tSt.textContent = '✅ مثالي'; tSt.className = 'kpi-status good'; }
+  else if (t >= 10 && t <= 35) { tSt.textContent = '⚠️ معتدل'; tSt.className = 'kpi-status warn'; }
+  else { tSt.textContent = '🔴 خارج النطاق'; tSt.className = 'kpi-status danger'; }
+  document.getElementById('kpiTempBar').style.width = Math.min(100, (t / 50) * 100) + '%';
+
+  // Humidity
+  const h = r.humidity;
+  document.getElementById('kpiHumidity').innerHTML = `${h.toFixed(1)}<span class="kpi-unit"> %</span>`;
+  const hSt = document.getElementById('kpiHumidityStatus');
+  if (h >= 40 && h <= 70) { hSt.textContent = '✅ مثالي'; hSt.className = 'kpi-status good'; }
+  else if (h >= 30 && h <= 80) { hSt.textContent = '⚠️ مقبول'; hSt.className = 'kpi-status warn'; }
+  else { hSt.textContent = '🔴 غير مناسب'; hSt.className = 'kpi-status danger'; }
+  document.getElementById('kpiHumidityBar').style.width = h + '%';
+
+  // Soil
+  const s = r.soil_pct;
+  document.getElementById('kpiSoil').innerHTML = `${s}<span class="kpi-unit"> %</span>`;
+  const sSt = document.getElementById('kpiSoilStatus');
+  if (s > 50) { sSt.textContent = '🌿 رطب'; sSt.className = 'kpi-status good'; }
+  else if (s > 20) { sSt.textContent = '⚠️ معتدل'; sSt.className = 'kpi-status warn'; }
+  else { sSt.textContent = '🏜️ جاف'; sSt.className = 'kpi-status danger'; }
+  document.getElementById('kpiSoilBar').style.width = s + '%';
+
+  // Light
+  const l = r.light_pct;
+  document.getElementById('kpiLight').innerHTML = `${l}<span class="kpi-unit"> %</span>`;
+  const lSt = document.getElementById('kpiLightStatus');
+  if (l > 60) { lSt.textContent = '☀️ مشرق'; lSt.className = 'kpi-status good'; }
+  else if (l > 20) { lSt.textContent = '🌤 خافت'; lSt.className = 'kpi-status warn'; }
+  else { lSt.textContent = '🌑 مظلم'; lSt.className = 'kpi-status danger'; }
+  document.getElementById('kpiLightBar').style.width = l + '%';
+
+  // Gas
+  const g = r.gas_raw;
+  document.getElementById('kpiGas').innerHTML = `${g}<span class="kpi-unit"> ppm</span>`;
+  const gSt = document.getElementById('kpiGasStatus');
+  if (!r.gas_alert) { gSt.textContent = '✅ آمن'; gSt.className = 'kpi-status good'; }
+  else { gSt.textContent = '🚨 خطر!'; gSt.className = 'kpi-status danger'; }
+  document.getElementById('kpiGasBar').style.width = Math.min(100, (g / 1000) * 100) + '%';
+}
+
+function updateDetail(r) {
+  const ts = new Date(r.timestamp).toLocaleString('ar-EG');
+  document.getElementById('latestReadingDetail').innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-item"><div class="stat-title">ID</div><div class="stat-val" style="font-size:1.3rem">#${r.id}</div></div>
+      <div class="stat-item"><div class="stat-title">الوقت</div><div class="stat-val" style="font-size:0.85rem;color:var(--sky)">${ts}</div></div>
+      <div class="stat-item"><div class="stat-title">الحرارة</div><div class="stat-val green">${r.temp}°</div></div>
+      <div class="stat-item"><div class="stat-title">الرطوبة</div><div class="stat-val blue">${r.humidity}%</div></div>
+      <div class="stat-item"><div class="stat-title">التربة %</div><div class="stat-val yellow">${r.soil_pct}</div><div class="stat-sub">خام: ${r.soil_raw}</div></div>
+      <div class="stat-item"><div class="stat-title">الضوء %</div><div class="stat-val" style="color:var(--violet)">${r.light_pct}</div><div class="stat-sub">خام: ${r.light_raw}</div></div>
+      <div class="stat-item"><div class="stat-title">الغاز</div><div class="stat-val ${r.gas_alert ? 'style="color:var(--rose)"' : 'green'}">${r.gas_raw}</div><div class="stat-sub">${r.gas_alert ? '🚨 تنبيه' : '✅ آمن'}</div></div>
+    </div>`;
+}
+
+// ══════════════════════════════════════
+//  MINI CHART
+// ══════════════════════════════════════
+function updateMiniChart(readings) {
+  const labels = readings.map(r => new Date(r.timestamp).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}));
+  const tempData = readings.map(r => r.temp);
+  const humData = readings.map(r => r.humidity);
+
+  if (miniChartInst) miniChartInst.destroy();
+  const ctx = document.getElementById('miniChart').getContext('2d');
+  miniChartInst = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'الحرارة', data: tempData, borderColor: '#10d98a', backgroundColor: 'rgba(16,217,138,0.1)', tension: 0.4, pointRadius: 3, fill: true },
+        { label: 'الرطوبة', data: humData, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', tension: 0.4, pointRadius: 3, fill: true }
+      ]
+    },
+    options: chartOptions('#10d98a')
+  });
+}
+
+// ══════════════════════════════════════
+//  ANALYTICS — multi charts
+// ══════════════════════════════════════
+async function loadAnalytics() {
+  const limit = document.getElementById('analyticsLimit').value;
+  try {
+    const readings = (await api(`/api/readings?limit=${limit}`)).reverse();
+    const labels = readings.map(r => new Date(r.timestamp).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'}));
+
+    makeChart('chartTemp', labels, readings.map(r => r.temp), '#10d98a', 'الحرارة °C');
+    makeChart('chartHumidity', labels, readings.map(r => r.humidity), '#38bdf8', 'الرطوبة %');
+    makeChart('chartSoil', labels, readings.map(r => r.soil_pct), '#fbbf24', 'التربة %');
+    makeChart('chartLight', labels, readings.map(r => r.light_pct), '#a78bfa', 'الضوء %');
+    makeChart('chartGas', labels, readings.map(r => r.gas_raw), '#f43f5e', 'الغاز ppm');
+    toast('تم تحديث الرسوم البيانية', 'success');
+  } catch (e) {
+    toast('خطأ: ' + e.message, 'error');
+  }
+}
+
+function makeChart(id, labels, data, color, label) {
+  if (chartInstances[id]) chartInstances[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  chartInstances[id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ label, data, borderColor: color, backgroundColor: color + '18', tension: 0.4, pointRadius: 2, fill: true }]
+    },
+    options: chartOptions(color)
+  });
+}
+
+function chartOptions(color) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        ticks: { color: '#4a5a7a', font: { size: 10 }, maxRotation: 0, maxTicksLimit: 8 },
+        grid: { color: 'rgba(99,179,237,0.06)' }
+      },
+      y: {
+        ticks: { color: '#4a5a7a', font: { size: 11 } },
+        grid: { color: 'rgba(99,179,237,0.06)' }
+      }
+    },
+    interaction: { intersect: false, mode: 'index' }
+  };
+}
+
+// ══════════════════════════════════════
+//  HISTORY
+// ══════════════════════════════════════
+async function loadHistory() {
+  const limit = document.getElementById('histLimit').value;
+  try {
+    const data = await api(`/api/readings?limit=${limit}`);
+    historyData = data;
+    const tbody = document.getElementById('historyBody');
+    if (!data.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">📋</div>لا توجد بيانات</div></td></tr>'; return; }
+
+    tbody.innerHTML = data.map((r, i) => `
+      <tr>
+        <td style="color:var(--text-dim)">${r.id}</td>
+        <td>${new Date(r.timestamp).toLocaleString('ar-EG')}</td>
+        <td style="color:var(--emerald)">${r.temp}</td>
+        <td style="color:var(--sky)">${r.humidity}</td>
+        <td style="color:var(--amber)">${r.soil_pct}</td>
+        <td style="color:var(--violet)">${r.light_pct}</td>
+        <td style="color:var(--rose)">${r.gas_raw}</td>
+        <td>${r.gas_alert ? '<span class="badge badge-warn">🚨 تنبيه</span>' : '<span class="badge badge-ok">✅ آمن</span>'}</td>
+      </tr>`).join('');
+    toast(`تم تحميل ${data.length} قراءة`, 'success');
+  } catch (e) { toast('خطأ: ' + e.message, 'error'); }
+}
+
+function exportCSV() {
+  if (!historyData.length) { toast('لا توجد بيانات للتصدير', 'warn'); return; }
+  const headers = ['ID','الوقت','الحرارة','الرطوبة','التربة%','الضوء%','الغاز','تنبيه'];
+  const rows = historyData.map(r => [r.id, r.timestamp, r.temp, r.humidity, r.soil_pct, r.light_pct, r.gas_raw, r.gas_alert ? 'تنبيه' : 'آمن']);
+  const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `sensors_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('تم التصدير بنجاح', 'success');
+}
+
+// ══════════════════════════════════════
+//  STATISTICS
+// ══════════════════════════════════════
+async function loadStatistics() {
+  const hours = document.getElementById('statsHours').value;
+  try {
+    const s = await api(`/api/statistics?hours=${hours}`);
+    const sc = document.getElementById('statsContent');
+
+    const statBlock = (icon, name, data, color, unit='') => `
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-header"><div class="panel-title">${icon} ${name}</div></div>
+        <div class="panel-body"><div class="stats-grid">
+          <div class="stat-item"><div class="stat-title">الحد الأدنى</div><div class="stat-val" style="color:var(${color})">${data.min?.toFixed(1) ?? '--'}${unit}</div></div>
+          <div class="stat-item"><div class="stat-title">المتوسط</div><div class="stat-val" style="color:var(${color})">${data.avg?.toFixed(1) ?? '--'}${unit}</div></div>
+          <div class="stat-item"><div class="stat-title">الحد الأقصى</div><div class="stat-val" style="color:var(${color})">${data.max?.toFixed(1) ?? '--'}${unit}</div></div>
+        </div></div>
+      </div>`;
+
+    sc.innerHTML = `
+      <div class="panel" style="margin-bottom:20px">
+        <div class="panel-body"><div class="stats-grid">
+          <div class="stat-item"><div class="stat-title">الفترة</div><div class="stat-val blue">${s.period_hours}</div><div class="stat-sub">ساعة</div></div>
+          <div class="stat-item"><div class="stat-title">إجمالي القراءات</div><div class="stat-val green">${s.total_readings}</div><div class="stat-sub">قراءة</div></div>
+        </div></div>
+      </div>
+      ${statBlock('🌡️', 'درجة الحرارة', s.temperature, '--emerald', '°C')}
+      ${statBlock('💧', 'الرطوبة', s.humidity, '--sky', '%')}
+      ${statBlock('🌱', 'رطوبة التربة', s.soil_moisture, '--amber', '%')}
+      ${statBlock('💡', 'شدة الضوء', s.light_intensity, '--violet', '%')}
+      ${statBlock('💨', 'مستوى الغاز', s.gas, '--rose', '')}`;
+    toast('تم تحميل الإحصائيات', 'success');
+  } catch (e) { toast('خطأ: ' + e.message, 'error'); }
+}
+
+// ══════════════════════════════════════
+//  AI ANALYSIS
+// ══════════════════════════════════════
+async function runAI() {
+  const query = document.getElementById('aiQuery').value.trim();
+  const limit = parseInt(document.getElementById('aiLimit').value);
+  if (!query) { toast('أدخل سؤالك أولاً', 'warn'); return; }
+
+  document.getElementById('aiThinking').style.display = 'block';
+  document.getElementById('aiResult').classList.remove('visible');
+
+  try {
+    const data = await api('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit })
+    });
+    document.getElementById('aiReadingsCount').textContent = data.readings_count;
+    document.getElementById('aiContent').textContent = data.analysis;
+    document.getElementById('aiResult').classList.add('visible');
+    toast('تم التحليل بنجاح', 'success');
+  } catch (e) {
+    toast('خطأ في Gemini: ' + e.message, 'error');
+  } finally {
+    document.getElementById('aiThinking').style.display = 'none';
+  }
+}
+
+function quickAI(q) {
+  document.getElementById('aiQuery').value = q;
+  // switch to AI page if not already
+  document.querySelectorAll('.nav-item').forEach(i => {
+    if (i.dataset.page === 'ai') i.click();
+  });
+  runAI();
+}
+
+// ══════════════════════════════════════
+//  CONTROL
+// ══════════════════════════════════════
+async function controlRelay(action, num = '1') {
+  try {
+    const data = await api(`/api/control/relay?action=${action}`, { method: 'POST' });
+    const el = document.getElementById(`relay${num}Status`);
+    if (el) el.textContent = data.message;
+    toast(data.message, 'success');
+  } catch (e) {
+    toast('خطأ في التحكم: ' + e.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════
+//  ADD READING
+// ══════════════════════════════════════
+async function addReading() {
+  const payload = {
+    temp: parseFloat(document.getElementById('addTemp').value),
+    humidity: parseFloat(document.getElementById('addHumidity').value),
+    soil_pct: parseInt(document.getElementById('addSoilPct').value),
+    soil_raw: parseInt(document.getElementById('addSoilRaw').value),
+    light_pct: parseInt(document.getElementById('addLightPct').value),
+    light_raw: parseInt(document.getElementById('addLightRaw').value),
+    gas_raw: parseInt(document.getElementById('addGasRaw').value),
+    gas_alert: document.getElementById('addGasAlert').value === 'true',
+  };
+
+  if (Object.values(payload).some(v => isNaN(v))) { toast('يرجى ملء جميع الحقول', 'warn'); return; }
+
+  try {
+    await api('/api/readings/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    toast('تم حفظ القراءة بنجاح ✅', 'success');
+    ['addTemp','addHumidity','addSoilPct','addSoilRaw','addLightPct','addLightRaw','addGasRaw'].forEach(id => document.getElementById(id).value = '');
+  } catch (e) {
+    toast('خطأ: ' + e.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════
+//  AUTO REFRESH
+// ══════════════════════════════════════
+function toggleAutoRefresh() {
+  autoRefresh = !autoRefresh;
+  const toggle = document.getElementById('autoToggle');
+  toggle.classList.toggle('on', autoRefresh);
+  if (autoRefresh) {
+    toast('تحديث تلقائي كل 10 ثوانٍ', 'info');
+    refreshTimer = setInterval(loadDashboard, 10000);
+  } else {
+    clearInterval(refreshTimer);
+    toast('تم إيقاف التحديث التلقائي', 'info');
+  }
+}
+
+async function refreshAll() {
+  const btn = document.getElementById('mainRefreshBtn');
+  btn.classList.add('spinning');
+  await checkHealth();
+  await loadDashboard();
+  btn.classList.remove('spinning');
+}
+
+// ══════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════
+document.getElementById('baseUrl').addEventListener('change', () => {
+  checkHealth();
+  loadDashboard();
+});
+
+checkHealth();
+loadDashboard();
+</script>
+</body>
+</html>

@@ -16,7 +16,7 @@ from database import (
 )
 
 # ─── إعدادات Gemini API ───
-GEMINI_API_KEY = "AIzaSyAUT6q8rHN-WbqgS8zNu4Gu5FzYHDcCjrQ"
+GEMINI_API_KEY = "AIzaSyAlBpVb8_QJeoAC1P7pkGeGf47vfU9jf_0"
 genai.configure(api_key=GEMINI_API_KEY)
 
 # ─── إنشاء تطبيق FastAPI ───
@@ -116,7 +116,7 @@ def format_readings_for_gemini(readings: List[SensorReading]) -> str:
 async def call_gemini_api(prompt: str) -> str:
     """استدعاء Gemini API للتحليل الذكي"""
     try:
-        model = genai.GenerativeModel('gemini-flash-latest')
+        model = genai.GenerativeModel('gemini-flash-latest')  # ✅
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
