@@ -16,7 +16,7 @@ from database import (
 )
 
 # ─── إعدادات Gemini API ───
-GEMINI_API_KEY = "AIzaSyAlBpVb8_QJeoAC1P7pkGeGf47vfU9jf_0"
+GEMINI_API_KEY = GEMINI_API_KEY
 genai.configure(api_key=GEMINI_API_KEY)
 
 # ─── إنشاء تطبيق FastAPI ───
